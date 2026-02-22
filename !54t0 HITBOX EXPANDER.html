@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HitBox Expander</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #080c10;
+    --surface: rgba(10, 16, 24, 0.88);
+    --border: rgba(0, 200, 255, 0.15);
+    --accent: #00c8ff;
+    --accent-rgb: 0, 200, 255;
+    --accent2: #ff3a6e;
+    --accent3: #7fff00;
+    --text: #c8e0f0;
+    --muted: #4a6070;
+    --glow: 0 0 12px rgba(0, 200, 255, 0.4);
+    --glow2: 0 0 12px rgba(255, 58, 110, 0.4);
+  }
+
+  /* GLASS MODE */
+  body.glass-mode {
+    --surface: rgba(255,255,255,0.06);
+    --border: rgba(255,255,255,0.14);
+    --text: #ffffff;
+    --muted: rgba(255,255,255,0.38);
+  }
+  body.glass-mode .window {
+    background: rgba(255,255,255,0.06) !important;
+    border-color: rgba(255,255,255,0.18) !important;
+    box-shadow: 0 8px 48px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1) !important;
+    backdrop-filter: blur(50px) saturate(200%) !important;
+  }
+  body.glass-mode .titlebar,
+  body.glass-mode .status-bar,
+  body.glass-mode .tabs,
+  body.glass-mode .footer { background: rgba(255,255,255,0.04) !important; border-color: rgba(255,255,255,0.08) !important; }
+  body.glass-mode .toggle-row,
+  body.glass-mode .slider-group,
+  body.glass-mode .input-group,
+  body.glass-mode .keybind-row,
+  body.glass-mode .color-grid,
+  body.glass-mode .custom-color-row,
+  body.glass-mode .glass-toggle-row,
+  body.glass-mode .theme-preview,
+  body.glass-mode .info-card { background: rgba(255,255,255,0.05) !important; border-color: rgba(255,255,255,0.1) !important; }
+  body.glass-mode .toggle-row:hover,
+  body.glass-mode .slider-group:hover { background: rgba(255,255,255,0.09) !important; }
+  body.glass-mode .section-label::after { background: linear-gradient(to right, rgba(255,255,255,0.15), transparent) !important; }
+  body.glass-mode input[type="text"] { background: rgba(255,255,255,0.06) !important; border-color: rgba(255,255,255,0.12) !important; color: #fff !important; }
+
+  body {
+    background: var(--bg);
+    font-family: 'Rajdhani', sans-serif;
+    color: var(--text);
+    min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+    transition: background 0.4s;
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(var(--accent-rgb),0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(var(--accent-rgb),0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    animation: gridScroll 20s linear infinite;
+    pointer-events: none;
+    transition: opacity 0.5s;
+  }
+  body.glass-mode::before { opacity: 0.25; }
+
+  body::after {
+    content: '';
+    position: fixed; inset: 0;
+    background: radial-gradient(ellipse at 20% 50%, rgba(var(--accent-rgb),0.07) 0%, transparent 60%),
+                radial-gradient(ellipse at 80% 30%, rgba(255,58,110,0.05) 0%, transparent 60%);
+    pointer-events: none;
+  }
+
+  @keyframes gridScroll { 0% { transform: translateY(0); } 100% { transform: translateY(40px); } }
+
+  .window {
+    width: 392px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    backdrop-filter: blur(20px);
+    box-shadow: 0 0 0 1px rgba(var(--accent-rgb),0.05), 0 30px 60px rgba(0,0,0,0.7), var(--glow);
+    animation: fadeIn 0.4s ease forwards;
+    position: relative; z-index: 10;
+    transition: background 0.5s, border-color 0.5s, box-shadow 0.5s, backdrop-filter 0.5s;
+  }
+
+  @keyframes fadeIn { from { opacity:0; transform:translateY(-10px) scale(0.98); } to { opacity:1; transform:translateY(0) scale(1); } }
+
+  .titlebar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(var(--accent-rgb),0.04);
+    cursor: move; user-select: none;
+    transition: background 0.4s, border-color 0.4s;
+  }
+  .title-left { display: flex; align-items: center; gap: 10px; }
+  .logo-icon { width: 22px; height: 22px; }
+  .logo-icon svg { width: 100%; height: 100%; }
+  .title-text { font-family:'Share Tech Mono',monospace; font-size:11px; letter-spacing:2px; color:var(--accent); text-transform:uppercase; text-shadow:var(--glow); transition:color 0.3s; }
+  .title-sub { font-size:9px; color:var(--muted); font-family:'Share Tech Mono',monospace; letter-spacing:1px; }
+  .win-controls { display:flex; gap:6px; }
+  .win-btn { width:11px; height:11px; border-radius:50%; border:none; cursor:pointer; transition:filter 0.2s; }
+  .win-btn:hover { filter:brightness(1.4); }
+  .win-btn.close { background:var(--accent2); box-shadow:0 0 6px rgba(255,58,110,0.5); }
+  .win-btn.min { background:#ffb800; box-shadow:0 0 6px rgba(255,184,0,0.5); }
+  .win-btn.max { background:var(--accent3); box-shadow:0 0 6px rgba(127,255,0,0.5); }
+
+  .status-bar {
+    display:flex; align-items:center; gap:8px;
+    padding:6px 14px;
+    background:rgba(0,0,0,0.2); border-bottom:1px solid var(--border);
+    font-family:'Share Tech Mono',monospace; font-size:9px; color:var(--muted); letter-spacing:1px;
+    transition: background 0.4s, border-color 0.4s;
+  }
+  .status-dot { width:6px; height:6px; border-radius:50%; background:var(--muted); transition:background 0.3s, box-shadow 0.3s; }
+  .status-dot.active { background:var(--accent3); box-shadow:0 0 6px rgba(127,255,0,0.7); animation:pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+  .tabs {
+    display:flex; border-bottom:1px solid var(--border);
+    background:rgba(0,0,0,0.15);
+    transition:background 0.4s, border-color 0.4s;
+  }
+  .tab {
+    flex:1; padding:9px 0; text-align:center;
+    font-size:9.5px; font-weight:600; letter-spacing:1.2px; text-transform:uppercase;
+    color:var(--muted); cursor:pointer;
+    transition:all 0.2s; border-bottom:2px solid transparent; position:relative;
+  }
+  .tab:hover { color:var(--text); }
+  .tab.active { color:var(--accent); border-bottom-color:var(--accent); text-shadow:var(--glow); }
+  .tab.active::before { content:''; position:absolute; bottom:-1px; left:0; right:0; height:1px; background:var(--accent); box-shadow:var(--glow); }
+
+  .tab-content {
+    display:none; padding:14px; flex-direction:column; gap:12px;
+    max-height:370px; overflow-y:auto;
+    scrollbar-width:thin; scrollbar-color:rgba(var(--accent-rgb),0.2) transparent;
+  }
+  .tab-content.active { display:flex; }
+
+  .section-label {
+    font-family:'Share Tech Mono',monospace; font-size:9px; letter-spacing:2px;
+    color:var(--accent); text-transform:uppercase;
+    display:flex; align-items:center; gap:8px; opacity:0.8;
+    transition:color 0.3s;
+  }
+  .section-label::after { content:''; flex:1; height:1px; background:linear-gradient(to right, rgba(var(--accent-rgb),0.3), transparent); transition:background 0.3s; }
+
+  .info-card {
+    background:rgba(var(--accent-rgb),0.04); border:1px solid rgba(var(--accent-rgb),0.1);
+    border-radius:3px; padding:8px 10px; font-size:11px; color:var(--muted);
+    display:flex; align-items:center; gap:8px; transition:background 0.3s, border-color 0.3s;
+  }
+  .info-card .icon { color:var(--accent); font-size:13px; }
+
+  .toggle-row {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:8px 10px; background:rgba(0,0,0,0.2);
+    border:1px solid var(--border); border-radius:3px;
+    transition:border-color 0.2s, background 0.2s;
+  }
+  .toggle-row:hover { border-color:rgba(var(--accent-rgb),0.25); background:rgba(var(--accent-rgb),0.03); }
+  .toggle-row.on { border-color:rgba(var(--accent-rgb),0.3); }
+  .toggle-label { font-size:12px; font-weight:600; letter-spacing:0.5px; color:var(--text); }
+
+  .toggle-switch {
+    width:36px; height:18px; background:rgba(255,255,255,0.07);
+    border-radius:9px; position:relative; cursor:pointer;
+    border:1px solid var(--border); transition:background 0.3s, border-color 0.3s, box-shadow 0.3s;
+  }
+  .toggle-switch.on { background:rgba(var(--accent-rgb),0.2); border-color:var(--accent); box-shadow:var(--glow); }
+  .toggle-switch::after {
+    content:''; position:absolute; width:12px; height:12px;
+    background:var(--muted); border-radius:50%; top:2px; left:2px;
+    transition:transform 0.3s, background 0.3s, box-shadow 0.3s;
+  }
+  .toggle-switch.on::after { transform:translateX(18px); background:var(--accent); box-shadow:0 0 8px rgba(var(--accent-rgb),0.8); }
+
+  .slider-group {
+    display:flex; flex-direction:column; gap:6px; padding:10px;
+    background:rgba(0,0,0,0.2); border:1px solid var(--border); border-radius:3px;
+    transition:border-color 0.2s;
+  }
+  .slider-group:hover { border-color:rgba(var(--accent-rgb),0.25); }
+  .slider-header { display:flex; justify-content:space-between; align-items:center; }
+  .slider-name { font-size:12px; font-weight:600; color:var(--text); letter-spacing:0.5px; }
+  .slider-value {
+    font-family:'Share Tech Mono',monospace; font-size:11px; color:var(--accent);
+    background:rgba(var(--accent-rgb),0.08); padding:2px 7px; border-radius:2px;
+    border:1px solid rgba(var(--accent-rgb),0.15); min-width:40px; text-align:center;
+    transition:color 0.3s, background 0.3s, border-color 0.3s;
+  }
+
+  input[type="range"] { -webkit-appearance:none; width:100%; height:3px; border-radius:2px; outline:none; }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance:none; width:13px; height:13px; background:var(--accent);
+    border-radius:50%; cursor:pointer; box-shadow:0 0 8px rgba(var(--accent-rgb),0.6);
+    transition:box-shadow 0.2s, transform 0.2s;
+  }
+  input[type="range"]::-webkit-slider-thumb:hover { box-shadow:0 0 14px rgba(var(--accent-rgb),0.9); transform:scale(1.2); }
+
+  .input-group {
+    display:flex; flex-direction:column; gap:5px; padding:10px;
+    background:rgba(0,0,0,0.2); border:1px solid var(--border); border-radius:3px;
+    transition:border-color 0.2s;
+  }
+  .input-group:hover, .input-group:focus-within { border-color:rgba(var(--accent-rgb),0.3); }
+  .input-group label { font-size:11px; font-weight:600; color:var(--muted); letter-spacing:1px; text-transform:uppercase; }
+  .input-row { display:flex; gap:6px; }
+  .input-row input {
+    flex:1; background:rgba(0,0,0,0.3); border:1px solid rgba(var(--accent-rgb),0.12);
+    border-radius:2px; padding:6px 8px; font-family:'Share Tech Mono',monospace; font-size:12px;
+    color:var(--accent); outline:none; transition:border-color 0.2s, box-shadow 0.2s;
+  }
+  .input-row input:focus { border-color:rgba(var(--accent-rgb),0.4); box-shadow:0 0 0 1px rgba(var(--accent-rgb),0.1); }
+  .input-row button {
+    padding:6px 12px; background:rgba(var(--accent-rgb),0.1); border:1px solid rgba(var(--accent-rgb),0.25);
+    border-radius:2px; color:var(--accent); font-family:'Rajdhani',sans-serif; font-size:11px;
+    font-weight:600; letter-spacing:1px; cursor:pointer; transition:all 0.2s; text-transform:uppercase;
+  }
+  .input-row button:hover { background:rgba(var(--accent-rgb),0.2); box-shadow:var(--glow); }
+  .input-row button:active { transform:scale(0.97); }
+
+  .keybind-row {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:8px 10px; background:rgba(0,0,0,0.2); border:1px solid var(--border); border-radius:3px;
+  }
+  .keybind-label { font-size:12px; font-weight:600; color:var(--text); }
+  .key-badge {
+    font-family:'Share Tech Mono',monospace; font-size:10px; padding:3px 8px;
+    background:rgba(0,0,0,0.4); border:1px solid rgba(var(--accent-rgb),0.2); border-radius:3px;
+    color:var(--accent); cursor:pointer; transition:all 0.2s; letter-spacing:1px;
+  }
+  .key-badge:hover { border-color:rgba(var(--accent-rgb),0.5); box-shadow:var(--glow); }
+  .key-badge.recording { color:var(--accent2); border-color:rgba(255,58,110,0.5); box-shadow:var(--glow2); animation:blink 0.8s infinite; }
+  @keyframes blink { 50%{opacity:0.4} }
+
+  /* ---- MISC TAB ---- */
+  .theme-preview {
+    padding:12px; background:rgba(0,0,0,0.2); border:1px solid var(--border); border-radius:3px;
+    display:flex; flex-direction:column; gap:8px;
+  }
+  .preview-label-row { display:flex; align-items:center; gap:8px; }
+  .preview-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); box-shadow:0 0 6px rgba(var(--accent-rgb),0.6); transition:background 0.3s, box-shadow 0.3s; }
+  .preview-lbl { font-family:'Share Tech Mono',monospace; font-size:9px; color:var(--muted); letter-spacing:1px; }
+  .preview-hex { font-family:'Share Tech Mono',monospace; font-size:9px; color:var(--accent); margin-left:auto; letter-spacing:1px; transition:color 0.3s; }
+  .preview-bar { height:3px; border-radius:2px; background:var(--accent); box-shadow:0 0 8px rgba(var(--accent-rgb),0.4); width:60%; transition:background 0.3s, box-shadow 0.3s; }
+  .preview-mini-toggles { display:flex; gap:6px; }
+  .preview-mini-dot { width:28px; height:14px; border-radius:7px; background:rgba(var(--accent-rgb),0.2); border:1px solid rgba(var(--accent-rgb),0.3); position:relative; transition:background 0.3s, border-color 0.3s; }
+  .preview-mini-dot::after { content:''; position:absolute; width:8px; height:8px; background:var(--accent); border-radius:50%; top:2px; left:17px; transition:background 0.3s; }
+
+  .color-grid {
+    display:grid; grid-template-columns:repeat(6,1fr); gap:8px;
+    padding:12px; background:rgba(0,0,0,0.2); border:1px solid var(--border); border-radius:3px;
+  }
+  .color-swatch {
+    width:100%; aspect-ratio:1; border-radius:50%; cursor:pointer;
+    border:2px solid rgba(0,0,0,0.5); transition:transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+    position:relative; display:flex; align-items:center; justify-content:center;
+  }
+  .color-swatch:hover { transform:scale(1.18); }
+  .color-swatch.selected { border-color:rgba(255,255,255,0.9); box-shadow:0 0 12px rgba(255,255,255,0.4); transform:scale(1.12); }
+  .color-swatch.selected::after { content:'✓'; font-size:10px; color:rgba(0,0,0,0.8); font-weight:700; }
+
+  .custom-color-row {
+    display:flex; align-items:center; gap:10px; padding:9px 12px;
+    background:rgba(0,0,0,0.2); border:1px solid var(--border); border-radius:3px;
+  }
+  .custom-color-row label { font-size:11px; font-weight:600; color:var(--muted); letter-spacing:1px; text-transform:uppercase; flex:1; }
+  input[type="color"] { width:38px; height:26px; border:1px solid rgba(255,255,255,0.15); border-radius:3px; background:none; cursor:pointer; padding:2px; }
+
+  .glass-toggle-row {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:11px 12px; border-radius:3px; cursor:pointer;
+    background:linear-gradient(135deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01));
+    border:1px solid rgba(255,255,255,0.12); position:relative; overflow:hidden;
+    transition:background 0.2s;
+  }
+  .glass-toggle-row::before {
+    content:''; position:absolute; top:0; left:0; right:0; height:1px;
+    background:linear-gradient(to right, transparent, rgba(255,255,255,0.18), transparent);
+  }
+  .glass-toggle-row:hover { background:rgba(255,255,255,0.08); }
+  .glass-label-group { display:flex; align-items:center; gap:8px; }
+  .glass-toggle-label { font-size:12px; font-weight:700; color:var(--text); letter-spacing:0.5px; }
+  .glass-badge {
+    font-family:'Share Tech Mono',monospace; font-size:8px; letter-spacing:1px;
+    color:rgba(255,255,255,0.4); background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.12);
+    padding:2px 6px; border-radius:2px; text-transform:uppercase;
+  }
+
+  /* ---- BACKGROUND MEDIA ---- */
+  #bgLayer {
+    position:fixed; inset:0; z-index:0; pointer-events:none;
+    overflow:hidden;
+  }
+  #bgLayer img, #bgLayer video {
+    width:100%; height:100%; object-fit:cover;
+    display:block;
+  }
+
+  .drop-zone {
+    padding:16px 10px;
+    background:rgba(0,0,0,0.25);
+    border:1.5px dashed rgba(var(--accent-rgb),0.25);
+    border-radius:4px;
+    text-align:center;
+    cursor:pointer;
+    transition:border-color 0.2s, background 0.2s;
+    position:relative;
+  }
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color:rgba(var(--accent-rgb),0.6);
+    background:rgba(var(--accent-rgb),0.05);
+  }
+  .drop-zone input[type="file"] {
+    position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%;
+  }
+  .drop-icon { font-size:22px; margin-bottom:4px; color:var(--accent); opacity:0.7; }
+  .drop-title { font-size:12px; font-weight:700; color:var(--text); letter-spacing:0.5px; }
+  .drop-sub { font-size:10px; color:var(--muted); margin-top:2px; font-family:'Share Tech Mono',monospace; letter-spacing:0.5px; }
+
+  .bg-preview-row {
+    display:flex; align-items:center; gap:10px;
+    padding:8px 10px;
+    background:rgba(0,0,0,0.2); border:1px solid var(--border); border-radius:3px;
+  }
+  .bg-thumb {
+    width:44px; height:32px; border-radius:2px; object-fit:cover;
+    border:1px solid rgba(var(--accent-rgb),0.2);
+    background:#000;
+    flex-shrink:0;
+  }
+  .bg-filename { font-family:'Share Tech Mono',monospace; font-size:9px; color:var(--muted); flex:1; letter-spacing:0.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .bg-clear-btn {
+    padding:4px 8px; font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase;
+    background:rgba(255,58,110,0.1); border:1px solid rgba(255,58,110,0.3); border-radius:2px;
+    color:#ff3a6e; cursor:pointer; transition:all 0.2s; font-family:'Rajdhani',sans-serif;
+    flex-shrink:0;
+  }
+  .bg-clear-btn:hover { background:rgba(255,58,110,0.2); box-shadow:0 0 8px rgba(255,58,110,0.3); }
+
+  .bg-controls { display:none; flex-direction:column; gap:8px; }
+  .bg-controls.visible { display:flex; }
+
+  .footer {
+    padding:8px 14px; border-top:1px solid var(--border);
+    display:flex; justify-content:space-between; align-items:center;
+    background:rgba(0,0,0,0.15); transition:background 0.4s, border-color 0.4s;
+  }
+  .footer-text { font-family:'Share Tech Mono',monospace; font-size:8px; letter-spacing:1.5px; color:var(--muted); text-transform:uppercase; }
+  .footer-text span { color:var(--accent); transition:color 0.3s; }
+
+  ::-webkit-scrollbar { width:3px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  ::-webkit-scrollbar-thumb { background:rgba(var(--accent-rgb),0.2); border-radius:2px; }
+
+  .scanlines { position:fixed; inset:0; pointer-events:none; z-index:5; background:repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px); }
+
+  .window::before, .window::after { content:''; position:absolute; width:8px; height:8px; border-color:var(--accent); border-style:solid; opacity:0.6; transition:border-color 0.3s; }
+  .window::before { top:-1px; left:-1px; border-width:1px 0 0 1px; }
+  .window::after { bottom:-1px; right:-1px; border-width:0 1px 1px 0; }
+</style>
+</head>
+<body>
+<div id="bgLayer"></div>
+<div class="scanlines"></div>
+
+<div class="window" id="window">
+  <div class="titlebar">
+    <div class="title-left">
+      <div class="logo-icon">
+        <svg viewBox="0 0 22 22" fill="none">
+          <polygon points="11,2 20,8 20,14 11,20 2,14 2,8" stroke="var(--accent)" stroke-width="1.2" fill="rgba(0,200,255,0.05)"/>
+          <polygon points="11,6 16,9 16,13 11,16 6,13 6,9" stroke="var(--accent)" stroke-width="0.8" fill="rgba(0,200,255,0.08)" opacity="0.7"/>
+          <circle cx="11" cy="11" r="2" fill="var(--accent)" opacity="0.8"/>
+        </svg>
+      </div>
+      <div>
+        <div class="title-text">HitBox Expander</div>
+        <div class="title-sub">Traza's Private Edition</div>
+      </div>
+    </div>
+    <div class="win-controls">
+      <button class="win-btn min"></button>
+      <button class="win-btn max"></button>
+      <button class="win-btn close"></button>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    <div class="status-dot" id="statusDot"></div>
+    <span id="statusText">INACTIVE</span>
+    <span style="margin-left:auto;color:#2a3a4a">|</span>
+    <span>v2.1</span>
+    <span style="color:#2a3a4a">|</span>
+    <span id="playerCount">— PLAYERS</span>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="home">HOME</div>
+    <div class="tab" data-tab="players">PLAYER</div>
+    <div class="tab" data-tab="visuals">VISUALS</div>
+    <div class="tab" data-tab="misc">MISC</div>
+  </div>
+
+  <!-- HOME -->
+  <div class="tab-content active" id="tab-home">
+    <div class="info-card"><span class="icon">⚠</span><span>Only works on some games. Use responsibly.</span></div>
+    <div class="section-label">Configuration</div>
+    <div class="slider-group">
+      <div class="slider-header"><span class="slider-name">Hitbox Size</span><span class="slider-value" id="hitboxSizeVal">15</span></div>
+      <input type="range" min="1" max="50" value="15" id="hitboxSize">
+    </div>
+    <div class="slider-group">
+      <div class="slider-header"><span class="slider-name">Hitbox Transparency</span><span class="slider-value" id="hitboxTransVal">0.9</span></div>
+      <input type="range" min="0" max="10" value="9" id="hitboxTrans" step="1">
+    </div>
+    <div class="section-label">Main</div>
+    <div class="toggle-row" id="statusRow">
+      <span class="toggle-label">Hitbox Status</span>
+      <div class="toggle-switch" id="statusToggle"></div>
+    </div>
+    <div class="toggle-row">
+      <span class="toggle-label">Team Check</span>
+      <div class="toggle-switch" id="teamToggle"></div>
+    </div>
+    <div class="section-label">Keybinds</div>
+    <div class="keybind-row">
+      <span class="keybind-label">Toggle UI</span>
+      <span class="key-badge" id="toggleKey">F</span>
+    </div>
+  </div>
+
+  <!-- PLAYER -->
+  <div class="tab-content" id="tab-players">
+    <div class="section-label">Movement</div>
+    <div class="slider-group">
+      <div class="slider-header"><span class="slider-name">Walk Speed</span><span class="slider-value" id="wsVal">16</span></div>
+      <input type="range" min="0" max="100" value="16" id="wsSlider">
+    </div>
+    <div class="toggle-row"><span class="toggle-label">Loop WalkSpeed</span><div class="toggle-switch" id="loopWSToggle"></div></div>
+    <div class="slider-group">
+      <div class="slider-header"><span class="slider-name">Jump Power</span><span class="slider-value" id="jpVal">50</span></div>
+      <input type="range" min="0" max="200" value="50" id="jpSlider">
+    </div>
+    <div class="section-label">Teleport</div>
+    <div class="slider-group">
+      <div class="slider-header"><span class="slider-name">TP Speed</span><span class="slider-value" id="tpSpeedVal">3</span></div>
+      <input type="range" min="1" max="20" value="3" id="tpSpeedSlider">
+    </div>
+    <div class="toggle-row"><span class="toggle-label">TP Walk</span><div class="toggle-switch" id="tpWalkToggle"></div></div>
+    <div class="input-group">
+      <label>Teleport to Player</label>
+      <div class="input-row"><input type="text" placeholder="Username..."><button>GO</button></div>
+    </div>
+  </div>
+
+  <!-- VISUALS -->
+  <div class="tab-content" id="tab-visuals">
+    <div class="section-label">ESP</div>
+    <div class="toggle-row"><span class="toggle-label">ESP Enabled</span><div class="toggle-switch" id="espToggle"></div></div>
+    <div class="toggle-row"><span class="toggle-label">Name Tags</span><div class="toggle-switch" id="nameTagToggle"></div></div>
+    <div class="toggle-row"><span class="toggle-label">Health Bars</span><div class="toggle-switch" id="healthBarToggle"></div></div>
+    <div class="toggle-row"><span class="toggle-label">Team Color ESP</span><div class="toggle-switch" id="teamEspToggle"></div></div>
+    <div class="section-label">Chams</div>
+    <div class="toggle-row"><span class="toggle-label">Chams Enabled</span><div class="toggle-switch" id="chamsToggle"></div></div>
+    <div class="slider-group">
+      <div class="slider-header"><span class="slider-name">ESP Distance</span><span class="slider-value" id="espDistVal">500</span></div>
+      <input type="range" min="100" max="2000" value="500" id="espDist">
+    </div>
+  </div>
+
+  <!-- MISC -->
+  <div class="tab-content" id="tab-misc">
+    <div class="section-label">Menu Color</div>
+
+    <div class="theme-preview">
+      <div class="preview-label-row">
+        <div class="preview-dot" id="prevDot"></div>
+        <span class="preview-lbl">ACCENT COLOR</span>
+        <span class="preview-hex" id="prevHex">#00c8ff</span>
+      </div>
+      <div class="preview-bar" id="prevBar"></div>
+      <div class="preview-mini-toggles">
+        <div class="preview-mini-dot"></div>
+        <div class="preview-mini-dot"></div>
+        <div class="preview-mini-dot"></div>
+      </div>
+    </div>
+
+    <div class="color-grid" id="colorGrid"></div>
+
+    <div class="custom-color-row">
+      <label>Custom Color</label>
+      <input type="color" id="customColor" value="#00c8ff">
+    </div>
+
+    <div class="section-label">Background</div>
+
+    <div class="drop-zone" id="dropZone">
+      <input type="file" id="bgFileInput" accept="image/*,video/mp4,video/webm,video/ogg,.gif">
+      <div class="drop-icon">⬆</div>
+      <div class="drop-title">Upload Background</div>
+      <div class="drop-sub">GIF · PNG · JPG · MP4 · WEBM · MOV</div>
+    </div>
+
+    <div class="bg-preview-row" id="bgPreviewRow" style="display:none;">
+      <img class="bg-thumb" id="bgThumb" src="" alt="">
+      <span class="bg-filename" id="bgFilename">—</span>
+      <button class="bg-clear-btn" id="bgClearBtn">✕ Clear</button>
+    </div>
+
+    <div class="bg-controls" id="bgControls">
+      <div class="slider-group">
+        <div class="slider-header"><span class="slider-name">BG Opacity</span><span class="slider-value" id="bgOpacityVal">60%</span></div>
+        <input type="range" min="0" max="100" value="60" id="bgOpacity">
+      </div>
+      <div class="slider-group">
+        <div class="slider-header"><span class="slider-name">BG Blur</span><span class="slider-value" id="bgBlurVal">0px</span></div>
+        <input type="range" min="0" max="20" value="0" id="bgBlur">
+      </div>
+      <div class="slider-group">
+        <div class="slider-header"><span class="slider-name">Overlay Dim</span><span class="slider-value" id="bgDimVal">40%</span></div>
+        <input type="range" min="0" max="90" value="40" id="bgDim">
+      </div>
+    </div>
+
+    <div class="section-label">Layout</div>
+
+    <div class="glass-toggle-row">
+      <div class="glass-label-group">
+        <span class="glass-toggle-label">Glass Layout</span>
+        <span class="glass-badge">FROSTED</span>
+      </div>
+      <div class="toggle-switch" id="glassToggle"></div>
+    </div>
+
+    <div class="section-label">About</div>
+    <div class="info-card">
+      <span class="icon">◈</span>
+      <span>Made by <strong style="color:var(--accent)">! 54t0</strong> · Traza's HitBox Expander v2.1</span>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span class="footer-text">Made by <span>! 54t0</span></span>
+    <span class="footer-text" id="fpsCounter">FPS: <span>—</span></span>
+  </div>
+</div>
+
+<script>
+  // ---- BACKGROUND MEDIA ----
+  const bgLayer = document.getElementById('bgLayer');
+  const bgFileInput = document.getElementById('bgFileInput');
+  const dropZone = document.getElementById('dropZone');
+  const bgPreviewRow = document.getElementById('bgPreviewRow');
+  const bgThumb = document.getElementById('bgThumb');
+  const bgFilename = document.getElementById('bgFilename');
+  const bgClearBtn = document.getElementById('bgClearBtn');
+  const bgControls = document.getElementById('bgControls');
+  let bgObjectUrl = null;
+  let bgDimOverlay = null;
+
+  function getOrCreateDimOverlay() {
+    if (!bgDimOverlay) {
+      bgDimOverlay = document.createElement('div');
+      bgDimOverlay.style.cssText = 'position:fixed;inset:0;z-index:1;pointer-events:none;background:rgba(0,0,0,0.4);transition:background 0.3s;';
+      document.body.insertBefore(bgDimOverlay, document.body.firstChild);
+    }
+    return bgDimOverlay;
+  }
+
+  function applyBgMedia(file) {
+    if (bgObjectUrl) URL.revokeObjectURL(bgObjectUrl);
+    bgObjectUrl = URL.createObjectURL(file);
+    bgLayer.innerHTML = '';
+
+    const isVideo = file.type.startsWith('video/') || file.name.endsWith('.mov');
+    let el;
+    if (isVideo) {
+      el = document.createElement('video');
+      el.autoplay = true; el.loop = true; el.muted = true; el.playsInline = true;
+      // thumb via canvas after load
+      el.addEventListener('loadeddata', () => {
+        const c = document.createElement('canvas'); c.width=60; c.height=40;
+        c.getContext('2d').drawImage(el,0,0,60,40);
+        bgThumb.src = c.toDataURL();
+      });
+    } else {
+      el = document.createElement('img');
+      el.alt = 'background';
+      bgThumb.src = bgObjectUrl;
+    }
+    el.src = bgObjectUrl;
+    el.style.opacity = document.getElementById('bgOpacity').value / 100;
+    el.style.filter = `blur(${document.getElementById('bgBlur').value}px)`;
+    el.style.transform = el.style.filter !== 'blur(0px)' ? 'scale(1.05)' : '';
+    bgLayer.appendChild(el);
+
+    bgFilename.textContent = file.name.length > 28 ? file.name.slice(0,25)+'...' : file.name;
+    bgPreviewRow.style.display = 'flex';
+    bgControls.classList.add('visible');
+    document.body.style.background = 'transparent';
+    getOrCreateDimOverlay();
+    refreshBgSliders();
+  }
+
+  function clearBg() {
+    if (bgObjectUrl) { URL.revokeObjectURL(bgObjectUrl); bgObjectUrl = null; }
+    bgLayer.innerHTML = '';
+    bgPreviewRow.style.display = 'none';
+    bgControls.classList.remove('visible');
+    bgThumb.src = '';
+    bgFilename.textContent = '—';
+    bgFileInput.value = '';
+    document.body.style.background = '';
+    if (bgDimOverlay) { bgDimOverlay.remove(); bgDimOverlay = null; }
+  }
+
+  function refreshBgSliders() {
+    const el = bgLayer.querySelector('img,video'); if (!el) return;
+    const opacity = document.getElementById('bgOpacity').value / 100;
+    const blur = document.getElementById('bgBlur').value;
+    const dim = document.getElementById('bgDim').value / 100;
+    el.style.opacity = opacity;
+    el.style.filter = `blur(${blur}px)`;
+    el.style.transform = blur > 0 ? 'scale(1.06)' : '';
+    if (bgDimOverlay) bgDimOverlay.style.background = `rgba(0,0,0,${dim})`;
+  }
+
+  bgFileInput.addEventListener('change', e => { if(e.target.files[0]) applyBgMedia(e.target.files[0]); });
+  bgClearBtn.addEventListener('click', clearBg);
+
+  // Drag and drop
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault(); dropZone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file && (file.type.startsWith('image/') || file.type.startsWith('video/'))) applyBgMedia(file);
+  });
+
+  // BG sliders
+  function makeBgSlider(id, dispId, fmt) {
+    const s=document.getElementById(id), d=document.getElementById(dispId); if(!s||!d) return;
+    s.addEventListener('input', ()=>{ d.textContent=fmt(s.value); refreshBgSliders(); refreshSlider(s); });
+    refreshSlider(s);
+  }
+  makeBgSlider('bgOpacity','bgOpacityVal', v=>v+'%');
+  makeBgSlider('bgBlur','bgBlurVal', v=>v+'px');
+  makeBgSlider('bgDim','bgDimVal', v=>v+'%');
+
+  // ---- COLOR SYSTEM ----
+  const COLORS = [
+    '#00c8ff','#ff3a6e','#7fff00','#ff8c00',
+    '#a855f7','#f0e000','#00ff9f','#ff4040',
+    '#00bfff','#ff69b4','#ffffff','#c084fc',
+  ];
+
+  function hexToRgb(hex) {
+    const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
+    return `${r}, ${g}, ${b}`;
+  }
+
+  function applyAccent(hex) {
+    const rgb = hexToRgb(hex);
+    const root = document.documentElement;
+    root.style.setProperty('--accent', hex);
+    root.style.setProperty('--accent-rgb', rgb);
+    root.style.setProperty('--glow', `0 0 12px rgba(${rgb}, 0.4)`);
+    root.style.setProperty('--border', `rgba(${rgb}, 0.15)`);
+    document.getElementById('prevHex').textContent = hex;
+    document.getElementById('customColor').value = hex;
+    document.querySelectorAll('input[type="range"]').forEach(refreshSlider);
+  }
+
+  // Build swatches
+  const grid = document.getElementById('colorGrid');
+  COLORS.forEach((hex, i) => {
+    const sw = document.createElement('div');
+    sw.className = 'color-swatch' + (i===0?' selected':'');
+    sw.style.background = hex;
+    sw.addEventListener('click', () => {
+      document.querySelectorAll('.color-swatch').forEach(s=>s.classList.remove('selected'));
+      sw.classList.add('selected');
+      applyAccent(hex);
+    });
+    grid.appendChild(sw);
+  });
+
+  document.getElementById('customColor').addEventListener('input', e => {
+    document.querySelectorAll('.color-swatch').forEach(s=>s.classList.remove('selected'));
+    applyAccent(e.target.value);
+  });
+
+  // ---- GLASS ----
+  const glassSwitch = document.getElementById('glassToggle');
+  glassSwitch.addEventListener('click', () => {
+    glassSwitch.classList.toggle('on');
+    document.body.classList.toggle('glass-mode', glassSwitch.classList.contains('on'));
+  });
+
+  // ---- TABS ----
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById('tab-'+tab.dataset.tab).classList.add('active');
+    });
+  });
+
+  // ---- TOGGLES ----
+  function makeToggle(id, cb) {
+    const el = document.getElementById(id); if(!el) return;
+    let on = false;
+    el.addEventListener('click', () => { on=!on; el.classList.toggle('on',on); cb&&cb(on); });
+  }
+  makeToggle('statusToggle', on => {
+    document.getElementById('statusDot').classList.toggle('active', on);
+    document.getElementById('statusText').textContent = on ? 'ACTIVE' : 'INACTIVE';
+    document.getElementById('statusRow').classList.toggle('on', on);
+  });
+  ['teamToggle','loopWSToggle','tpWalkToggle','espToggle','nameTagToggle','healthBarToggle','teamEspToggle','chamsToggle']
+    .forEach(id => makeToggle(id));
+
+  // ---- SLIDERS ----
+  function refreshSlider(s) {
+    const pct = ((s.value-s.min)/(s.max-s.min))*100;
+    const hex = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+    s.style.background = `linear-gradient(to right, ${hex}99 ${pct}%, rgba(255,255,255,0.07) ${pct}%)`;
+  }
+  function makeSlider(id, dispId, fmt) {
+    const s=document.getElementById(id), d=document.getElementById(dispId); if(!s||!d) return;
+    const update=()=>{ d.textContent=fmt?fmt(s.value):s.value; refreshSlider(s); };
+    s.addEventListener('input', update); update();
+  }
+  makeSlider('hitboxSize','hitboxSizeVal');
+  makeSlider('hitboxTrans','hitboxTransVal', v=>(v/10).toFixed(1));
+  makeSlider('wsSlider','wsVal');
+  makeSlider('jpSlider','jpVal');
+  makeSlider('tpSpeedSlider','tpSpeedVal');
+  makeSlider('espDist','espDistVal');
+
+  // ---- KEYBIND ----
+  const kb = document.getElementById('toggleKey');
+  let rec = false;
+  kb.addEventListener('click', () => {
+    if(rec) return; rec=true; kb.classList.add('recording'); kb.textContent='...';
+    const h=e=>{ e.preventDefault(); kb.textContent=e.key.toUpperCase(); kb.classList.remove('recording'); rec=false; document.removeEventListener('keydown',h); };
+    document.addEventListener('keydown',h);
+  });
+
+  // ---- PLAYER COUNT ----
+  document.getElementById('playerCount').textContent = (Math.floor(Math.random()*15)+2)+' PLAYERS';
+
+  // ---- DRAG ----
+  const win=document.getElementById('window'), bar=win.querySelector('.titlebar');
+  let drag=false,ox=0,oy=0;
+  bar.addEventListener('mousedown',e=>{ drag=true; ox=e.clientX-win.offsetLeft; oy=e.clientY-win.offsetTop; win.style.position='fixed'; });
+  document.addEventListener('mousemove',e=>{ if(!drag)return; win.style.left=(e.clientX-ox)+'px'; win.style.top=(e.clientY-oy)+'px'; win.style.transform='none'; win.style.margin='0'; });
+  document.addEventListener('mouseup',()=>drag=false);
+
+  // ---- FPS ----
+  let frames=0,last=performance.now();
+  (function tick(now){ frames++; if(now-last>500){ document.querySelector('#fpsCounter span').textContent=Math.round(frames*1000/(now-last)); frames=0; last=now; } requestAnimationFrame(tick); })(performance.now());
+
+  // ---- WIN CONTROLS ----
+  document.querySelector('.win-btn.close').addEventListener('click',()=>{ win.style.transition='opacity 0.2s,transform 0.2s'; win.style.opacity='0'; win.style.transform='scale(0.95)'; setTimeout(()=>win.style.display='none',200); });
+  document.querySelector('.win-btn.min').addEventListener('click',()=>{ win.style.transition='opacity 0.2s'; win.style.opacity=win.style.opacity==='0.3'?'1':'0.3'; });
+</script>
+</body>
+</html>
