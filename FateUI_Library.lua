@@ -15,7 +15,7 @@
     HOW DEVELOPERS USE THIS:
     ==============================
 
-    local FateUI = loadstring(game:HttpGet("YOUR_RAW_GITHUB_URL"))()
+    local FateUI = loadstring(game:HttpGet("YOUR_RAW_GITHUB_URL_FOR_54t0_FateUI.lua"))()
 
     local Window = FateUI:CreateWindow({
         Title = "My Script",
